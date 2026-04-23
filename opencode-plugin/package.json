@@ -1,0 +1,18 @@
+{
+  "name": "@model-router/opencode-plugin",
+  "version": "0.1.0",
+  "description": "OpenCode plugin that forwards inference events to a Rust model-router service",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

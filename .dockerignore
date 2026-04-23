@@ -1,0 +1,10 @@
+*.db
+*.db-shm
+*.db-wal
+Dockerfile
+docker-compose.yml
+.dockerignore
+.git/
+.gitignore
+README.md
+opencode-plugin/

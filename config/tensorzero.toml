@@ -1,0 +1,42 @@
+[gateway]
+disable_pseudonymous_usage_analytics = true
+
+[models.kimi_k2_5]
+routing = ["moonshot"]
+
+[models.kimi_k2_5.providers.moonshot]
+type = "openai"
+api_base = "https://api.moonshot.ai/v1"
+model_name = "kimi-k2.5"
+api_key_location = "env::MOONSHOT_API_KEY"
+
+[models.gpt_4o_mini]
+routing = ["openai"]
+
+[models.gpt_4o_mini.providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini"
+
+[models.zai_glm]
+routing = ["zai"]
+
+[models.zai_glm.providers.zai]
+type = "anthropic"
+model_name = "claude-3-5-sonnet-20241022"
+api_base = "https://api.z.ai/api/anthropic/v1/messages"
+
+[functions.routage_chat]
+type = "chat"
+
+[functions.routage_chat.variants.kimi_k2_5]
+type = "chat_completion"
+model = "kimi_k2_5"
+
+[functions.routage_chat.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "gpt_4o_mini"
+
+[functions.routage_chat.variants.zai_glm]
+type = "chat_completion"
+model = "zai_glm"
+max_tokens = 4096
