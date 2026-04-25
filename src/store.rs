@@ -102,6 +102,28 @@ impl Store {
             Self::bump_version(pool, 3).await?;
         }
 
+        if version < 4 {
+            let stmts = [
+                "CREATE TABLE IF NOT EXISTS optimization_runs (id TEXT PRIMARY KEY, status TEXT NOT NULL, progress_percent INTEGER NOT NULL DEFAULT 0, message TEXT, request_json TEXT NOT NULL, results_json TEXT, costs_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT)",
+                "CREATE INDEX IF NOT EXISTS idx_optimization_runs_status ON optimization_runs(status)",
+            ];
+            for stmt in &stmts {
+                sqlx::query(stmt).execute(pool).await?;
+            }
+            Self::bump_version(pool, 4).await?;
+        }
+
+        if version < 5 {
+            let stmts = [
+                "CREATE TABLE IF NOT EXISTS custom_router_preferences (id TEXT PRIMARY KEY, status TEXT NOT NULL, models_json TEXT NOT NULL, dataset_csv TEXT, train_samples INTEGER NOT NULL DEFAULT 0, accuracy REAL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT)",
+                "CREATE INDEX IF NOT EXISTS idx_custom_router_status ON custom_router_preferences(status)",
+            ];
+            for stmt in &stmts {
+                sqlx::query(stmt).execute(pool).await?;
+            }
+            Self::bump_version(pool, 5).await?;
+        }
+
         Ok(())
     }
 
@@ -492,5 +514,151 @@ impl Store {
             failures,
             performance_summary: perf_summary,
         }))
+    }
+
+    // ------------------------------------------------------------------
+    // Prompt Optimization store methods
+    // ------------------------------------------------------------------
+
+    pub async fn create_optimization_run(&self, run: &OptimizationRun) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO optimization_runs (id, status, progress_percent, message, request_json, results_json, costs_json, created_at, updated_at, completed_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            "#,
+        )
+        .bind(&run.id)
+        .bind(serde_json::to_string(&run.status)?)
+        .bind(run.progress_percent as i64)
+        .bind(&run.message)
+        .bind(&run.request_json)
+        .bind(run.results_json.as_ref())
+        .bind(run.costs_json.as_ref())
+        .bind(run.created_at.to_rfc3339())
+        .bind(run.updated_at.to_rfc3339())
+        .bind(run.completed_at.map(|t| t.to_rfc3339()))
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_optimization_run(&self, id: &str) -> anyhow::Result<Option<OptimizationRun>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, status, progress_percent, message, request_json, results_json, costs_json, created_at, updated_at, completed_at
+            FROM optimization_runs WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(r) => Ok(Some(OptimizationRun {
+                id: r.try_get("id")?,
+                status: serde_json::from_str(&r.try_get::<String, _>("status")?).unwrap_or(OptimizationStatus::Pending),
+                progress_percent: r.try_get::<i64, _>("progress_percent")? as u8,
+                message: r.try_get("message").ok(),
+                request_json: r.try_get("request_json")?,
+                results_json: r.try_get("results_json").ok(),
+                costs_json: r.try_get("costs_json").ok(),
+                created_at: r.try_get::<String, _>("created_at")?.parse().unwrap_or_else(|_| Utc::now()),
+                updated_at: r.try_get::<String, _>("updated_at")?.parse().unwrap_or_else(|_| Utc::now()),
+                completed_at: r.try_get::<String, _>("completed_at").ok().and_then(|s| s.parse().ok()),
+            })),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn update_optimization_run(&self, run: &OptimizationRun) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE optimization_runs
+            SET status = $1, progress_percent = $2, message = $3, results_json = $4, costs_json = $5, updated_at = $6, completed_at = $7
+            WHERE id = $8
+            "#,
+        )
+        .bind(serde_json::to_string(&run.status)?)
+        .bind(run.progress_percent as i64)
+        .bind(&run.message)
+        .bind(run.results_json.as_ref())
+        .bind(run.costs_json.as_ref())
+        .bind(run.updated_at.to_rfc3339())
+        .bind(run.completed_at.map(|t| t.to_rfc3339()))
+        .bind(&run.id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Custom Router Preference store methods
+    // ------------------------------------------------------------------
+
+    pub async fn create_custom_router_preference(&self, pref: &CustomRouterPreference) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO custom_router_preferences (id, status, models_json, dataset_csv, train_samples, accuracy, created_at, updated_at, completed_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            "#,
+        )
+        .bind(&pref.preference_id)
+        .bind(serde_json::to_string(&pref.status)?)
+        .bind(serde_json::to_string(&pref.models)?)
+        .bind(pref.dataset_csv.as_ref())
+        .bind(pref.train_samples as i64)
+        .bind(pref.accuracy)
+        .bind(pref.created_at.to_rfc3339())
+        .bind(pref.updated_at.to_rfc3339())
+        .bind(pref.completed_at.map(|t| t.to_rfc3339()))
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_custom_router_preference(&self, id: &str) -> anyhow::Result<Option<CustomRouterPreference>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, status, models_json, dataset_csv, train_samples, accuracy, created_at, updated_at, completed_at
+            FROM custom_router_preferences WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(r) => Ok(Some(CustomRouterPreference {
+                preference_id: r.try_get("id")?,
+                status: serde_json::from_str(&r.try_get::<String, _>("status")?).unwrap_or(OptimizationStatus::Pending),
+                models: serde_json::from_str(&r.try_get::<String, _>("models_json")?).unwrap_or_default(),
+                dataset_csv: r.try_get("dataset_csv").ok(),
+                train_samples: r.try_get::<i64, _>("train_samples")? as usize,
+                accuracy: r.try_get("accuracy").ok(),
+                created_at: r.try_get::<String, _>("created_at")?.parse().unwrap_or_else(|_| Utc::now()),
+                updated_at: r.try_get::<String, _>("updated_at")?.parse().unwrap_or_else(|_| Utc::now()),
+                completed_at: r.try_get::<String, _>("completed_at").ok().and_then(|s| s.parse().ok()),
+            })),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn update_custom_router_preference(&self, pref: &CustomRouterPreference) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE custom_router_preferences
+            SET status = $1, train_samples = $2, accuracy = $3, updated_at = $4, completed_at = $5
+            WHERE id = $6
+            "#,
+        )
+        .bind(serde_json::to_string(&pref.status)?)
+        .bind(pref.train_samples as i64)
+        .bind(pref.accuracy)
+        .bind(pref.updated_at.to_rfc3339())
+        .bind(pref.completed_at.map(|t| t.to_rfc3339()))
+        .bind(&pref.preference_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }

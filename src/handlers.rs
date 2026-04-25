@@ -40,6 +40,15 @@ pub struct ApiError {
     failure_kind: Option<FailureKind>,
 }
 
+impl ApiError {
+    pub fn new(error: impl Into<String>, failure_kind: Option<FailureKind>) -> Self {
+        Self {
+            error: error.into(),
+            failure_kind,
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = match self.failure_kind {
@@ -113,7 +122,7 @@ pub async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse
     }
 }
 
-fn resolve_policy(
+pub(crate) fn resolve_policy(
     policies: &HashMap<String, AgentPolicy>,
     tenant_policies: &HashMap<String, TenantPolicy>,
     tenant_id: &str,

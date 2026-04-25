@@ -3,6 +3,8 @@ mod bandit;
 mod config;
 mod domain;
 mod handlers;
+mod router;
+mod optimize;
 mod probe;
 mod store;
 
@@ -11,6 +13,8 @@ use crate::bandit::BanditEngine;
 use crate::config::Config;
 
 use crate::handlers::{AppState, explain, feedback, health, infer, metrics_handler, openai_chat_completions, openai_models, performance, route};
+use crate::router::{list_models, model_select, train_custom_router};
+use crate::optimize::{optimize, optimize_costs, optimize_results, optimize_status};
 use crate::probe::{build_health_map, run_probes};
 use crate::store::Store;
 use axum::{
@@ -98,6 +102,13 @@ async fn main() -> anyhow::Result<()> {
         .route("/explain/:session_id", get(explain))
         .route("/v1/models", get(openai_models))
         .route("/v1/chat/completions", post(openai_chat_completions))
+        .route("/v2/prompt/optimize", post(optimize))
+        .route("/v2/prompt/optimizeStatus/:id", get(optimize_status))
+        .route("/v2/prompt/optimizeResults/:id", get(optimize_results))
+        .route("/v2/prompt/optimize/:id/costs", get(optimize_costs))
+        .route("/v2/models", get(list_models))
+        .route("/v2/modelRouter/modelSelect", post(model_select))
+        .route("/v2/pzn/trainCustomRouter", post(train_custom_router))
         .layer(middleware::from_fn(auth_and_trace_middleware))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

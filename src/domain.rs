@@ -281,3 +281,249 @@ pub struct ExplainResponse {
     pub failures: Vec<ModelFailure>,
     pub performance_summary: String,
 }
+
+// ------------------------------------------------------------------
+// Prompt Optimization v2
+// ------------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GoldenRecord {
+    #[serde(flatten)]
+    pub fields: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RequestProvider {
+    pub provider: String,
+    pub model: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TargetModel {
+    pub provider: String,
+    pub model: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EvaluationConfig {
+    pub judge_model: String,
+    pub evaluation_prompt: String,
+    pub cutoff_score: f32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PromptOptimizeRequest {
+    pub system_prompt: String,
+    pub template: String,
+    pub fields: Vec<String>,
+    #[serde(default)]
+    pub goldens: Vec<GoldenRecord>,
+    #[serde(default)]
+    pub train_goldens: Vec<GoldenRecord>,
+    #[serde(default)]
+    pub test_goldens: Vec<GoldenRecord>,
+    pub origin_model: Option<RequestProvider>,
+    pub target_models: Vec<TargetModel>,
+    pub evaluation_metric: Option<String>,
+    pub evaluation_config: Option<EvaluationConfig>,
+    pub origin_model_evaluation_score: Option<f32>,
+    #[serde(default)]
+    pub prototype_mode: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OptimizationStatus {
+    Pending,
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PromptOptimizeStatusResponse {
+    pub optimization_run_id: String,
+    pub status: OptimizationStatus,
+    pub progress_percent: u8,
+    pub message: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub estimated_completion_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OptimizedPrompt {
+    pub provider: String,
+    pub model: String,
+    pub system_prompt: String,
+    pub template: String,
+    pub score: f32,
+    pub improvement_percent: Option<f32>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PromptOptimizeResultsResponse {
+    pub optimization_run_id: String,
+    pub status: OptimizationStatus,
+    pub origin_model: Option<RequestProvider>,
+    pub origin_model_score: Option<f32>,
+    pub optimized_prompts: Vec<OptimizedPrompt>,
+    pub train_examples_used: usize,
+    pub test_examples_used: usize,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OptimizationCostBreakdown {
+    pub optimization_run_id: String,
+    pub total_tokens_used: u64,
+    pub total_cost_usd: f32,
+    pub model_costs: Vec<ModelCost>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModelCost {
+    pub provider: String,
+    pub model: String,
+    pub tokens_used: u64,
+    pub cost_usd: f32,
+}
+
+/// Internal representation of an optimization run stored in the DB.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OptimizationRun {
+    pub id: String,
+    pub status: OptimizationStatus,
+    pub progress_percent: u8,
+    pub message: Option<String>,
+    pub request_json: String,
+    pub results_json: Option<String>,
+    pub costs_json: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+// ------------------------------------------------------------------
+// Model Listing v2
+// ------------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NdModelInfo {
+    pub provider: String,
+    pub model: String,
+    pub display_name: String,
+    pub context_length: u64,
+    pub input_price: f64,
+    pub output_price: f64,
+    pub latency: f64,
+    pub is_deprecated: bool,
+    pub supports_vision: bool,
+    pub supports_tools: bool,
+    pub supports_json_mode: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NdModelListResponse {
+    pub models: Vec<NdModelInfo>,
+    pub total: usize,
+    pub deprecated_models: Vec<NdModelInfo>,
+}
+
+// ------------------------------------------------------------------
+// Model Router / modelSelect v2
+// ------------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModelSelectMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModelSelectProvider {
+    pub provider: String,
+    pub model: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModelSelectTool {
+    #[serde(flatten)]
+    pub spec: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModelSelectRequest {
+    pub messages: Vec<ModelSelectMessage>,
+    pub models: Vec<ModelSelectProvider>,
+    #[serde(default)]
+    pub tools: Vec<ModelSelectTool>,
+    #[serde(default)]
+    pub hash_content: bool,
+    pub metric: Option<String>,
+    pub max_model_count: Option<usize>,
+    pub tradeoff: Option<String>,
+    pub preference_id: Option<String>,
+    pub previous_session: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModelSelectResponse {
+    pub session_id: String,
+    pub provider: String,
+    pub model: String,
+    pub ranked_models: Vec<ModelSelectRanked>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModelSelectRanked {
+    pub provider: String,
+    pub model: String,
+    pub score: f32,
+    pub reason: String,
+}
+
+// ------------------------------------------------------------------
+// Custom Router Training v2
+// ------------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CustomModelConfig {
+    pub provider: String,
+    pub model: String,
+    #[serde(default)]
+    pub is_custom: bool,
+    pub input_price: Option<f64>,
+    pub output_price: Option<f64>,
+    pub context_length: Option<u64>,
+    pub latency: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TrainCustomRouterRequest {
+    pub dataset_csv: String,
+    pub models: Vec<CustomModelConfig>,
+    pub prompt_column: String,
+    pub score_column_prefix: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TrainCustomRouterResponse {
+    pub preference_id: String,
+    pub status: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CustomRouterPreference {
+    pub preference_id: String,
+    pub status: OptimizationStatus,
+    pub models: Vec<CustomModelConfig>,
+    pub dataset_csv: Option<String>,
+    pub train_samples: usize,
+    pub accuracy: Option<f32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
